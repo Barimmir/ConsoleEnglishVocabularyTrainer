@@ -17,8 +17,8 @@ data class Statistics(
 data class Question(
     val variants: List<Word>,
     val correctAnswer: Word,
-    val listAskAnswer: List<String>,
-    val askAnswer: List<String>,
+    val correctTranslations: List<String>,
+    val answerOptions: List<String>,
 )
 
 class LearnWordsTrainer(
@@ -27,11 +27,11 @@ class LearnWordsTrainer(
     private var question: Question? = null
     val dictionary = loadDictionary()
 
-    fun loadDictionary(): MutableList<Word> {
+    private fun loadDictionary(): MutableList<Word> {
         val wordsFile = File(fileName)
 
         if (!wordsFile.exists()) {
-            File("words.txt").copyTo(wordsFile)
+            throw Exception("Файл словаря '$fileName' не найден")
         }
 
         val lines: List<String> = wordsFile.readLines()
@@ -39,25 +39,38 @@ class LearnWordsTrainer(
         val dictionary = mutableListOf<Word>()
 
         for (line in lines) {
-            val split = line.split("|")
+            if (line.isBlank()) continue
 
-            val word = Word(
-                original = split[0].trim(),
-                translation = split[1].trim(),
-                correctAnswersCount = split[2].toIntOrNull() ?: ZERO_TO_EXIT
-            )
-            dictionary.add(word)
+            val split = line.split("|")
+            if (split.size < 3) {
+                println("Пропуск некорректной строки: $line")
+                continue
+            }
+
+            try {
+                val word = Word(
+                    original = split[0].trim(),
+                    translation = split[1].trim(),
+                    correctAnswersCount = split[2].trim().toIntOrNull() ?: EXIT_CODE
+                )
+                if (word.original.isNotEmpty() && word.translation.isNotEmpty()) {
+                    dictionary.add(word)
+                }
+            } catch (e: Exception) {
+                println("Ошибка при обработке строки '$line': ${e.message}")
+            }
         }
         return dictionary
     }
 
     fun saveDictionary() {
-        val wordsFile = File(fileName)
-        val lines = mutableListOf<String>()
-        for (word in dictionary) {
-            lines.add("${word.original}|${word.translation}|${word.correctAnswersCount}")
+        try {
+            val wordsFile = File(fileName)
+            val lines = dictionary.map { "${it.original}|${it.translation}|${it.correctAnswersCount}" }
+            wordsFile.writeText(lines.joinToString("\n"))
+        } catch (e: Exception) {
+            println("Ошибка при сохранении словаря: ${e.message}")
         }
-        wordsFile.writeText(lines.joinToString("\n"))
     }
 
     fun getStatistics(): Statistics {
@@ -72,24 +85,28 @@ class LearnWordsTrainer(
     }
 
     fun getNextQuestion(): Question? {
-        val notLearnedList = dictionary.filter { it.correctAnswersCount < NEED_COUNT_TO_LEARN }
-        if (notLearnedList.isEmpty()) return null
-        val questionWords = notLearnedList.shuffled().take(NUMBER_OF_WORDS_TO_LEARN)
+        val notLearnedWords = dictionary.filter { it.correctAnswersCount < NEED_COUNT_TO_LEARN }
+        if (notLearnedWords.isEmpty()) return null
+
+        val questionWords = notLearnedWords.shuffled().take(NUMBER_OF_WORDS_TO_LEARN)
         val correctAnswer = questionWords.random()
-        val listAskAnswer = questionWords.map { it.translation }
-        var askAnswer = listAskAnswer.shuffled().take(NUMBER_OF_WORDS_TO_LEARN)
-        if (askAnswer.size != NUMBER_OF_WORDS_TO_LEARN) {
-            val needToAddWord = NUMBER_OF_WORDS_TO_LEARN - askAnswer.size
-            val learnedList = dictionary.filter { it.correctAnswersCount >= NEED_COUNT_TO_LEARN }
-            val takeNeedWord = learnedList.shuffled().take(needToAddWord)
-            val takeNeedWordListString = takeNeedWord.map { it.translation }
-            askAnswer = (askAnswer + takeNeedWordListString).shuffled()
+
+        val correctTranslations = questionWords.map { it.translation }
+        val answerOptions = if (correctTranslations.size >= NUMBER_OF_WORDS_TO_LEARN) {
+            correctTranslations.shuffled().take(NUMBER_OF_WORDS_TO_LEARN)
+        } else {
+            val learnedWords = dictionary.filter { it.correctAnswersCount >= NEED_COUNT_TO_LEARN }
+            val additionalTranslations = learnedWords.shuffled()
+                .take(NUMBER_OF_WORDS_TO_LEARN - correctTranslations.size)
+                .map { it.translation }
+            (correctTranslations + additionalTranslations).shuffled()
         }
+
         question = Question(
             variants = questionWords,
             correctAnswer = correctAnswer,
-            listAskAnswer = listAskAnswer,
-            askAnswer = askAnswer
+            correctTranslations = correctTranslations,
+            answerOptions = answerOptions
         )
         return question
     }
@@ -97,7 +114,7 @@ class LearnWordsTrainer(
     fun checkAnswer(userInputAskInt: Int): Boolean {
         if (question == null) return false
         val correctAnswerId =
-            (question?.askAnswer?.indexOf(question?.correctAnswer?.translation)?.plus(INCREASE_THE_INDEX_IN_THE_LIST))
+            (question?.answerOptions?.indexOf(question?.correctAnswer?.translation)?.plus(ANSWER_INDEX_OFFSET))
         if (correctAnswerId == userInputAskInt) {
             question?.correctAnswer?.correctAnswersCount++
             saveDictionary()
@@ -115,12 +132,12 @@ class LearnWordsTrainer(
 
 fun Question.asConsoleString(): String {
     println("\n${this.correctAnswer.original}:")
-    this.askAnswer.forEachIndexed { index, askInAnswer ->
-        println("${index + INCREASE_THE_INDEX_IN_THE_LIST} - $askInAnswer")
+    this.answerOptions.forEachIndexed { index, option ->
+        println("${index + ANSWER_INDEX_OFFSET} - $option")
     }
     println(
         "----------\n" +
-                "0 - Меню"
+                "$EXIT_CODE - Меню"
     )
     return String()
 }
@@ -128,5 +145,5 @@ fun Question.asConsoleString(): String {
 const val NEED_COUNT_TO_LEARN = 3
 const val MAX_PERCENTAGE = 100
 const val NUMBER_OF_WORDS_TO_LEARN = 4
-const val INCREASE_THE_INDEX_IN_THE_LIST = 1
-const val ZERO_TO_EXIT = 0
+const val ANSWER_INDEX_OFFSET = 1
+const val EXIT_CODE = 0
