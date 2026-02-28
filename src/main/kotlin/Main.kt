@@ -13,33 +13,33 @@ fun main() {
             "========= МЕНЮ =========\n" +
                     "1 - Учить слова \n" +
                     "2 - Статистика\n" +
+                    "3 - Сбросить прогресс\n" +
                     "0 - Выход"
         )
         val userInputMenu = readln().trim()
         when (userInputMenu) {
             "1" -> {
-                val question = trainer.getNextQuestion()
-                if (question == null) {
-                    println("Все слова в словаре выучены")
-                    return
-                }
                 while (true) {
-                    println(question.asConsoleString())
-                    val userInputAsk = readln().trim()
-                    while (userInputAsk !in (ZERO_TO_EXIT..question.askAnswer.size).toString()) {
-                        println("Введите число от $INCREASE_THE_INDEX_IN_THE_LIST до ${question.askAnswer.size} или $ZERO_TO_EXIT!")
+                    val question = trainer.getNextQuestion()
+                    if (question == null) {
+                        println("Все слова в словаре выучены")
                         return
                     }
-                    val userInputAskInt = userInputAsk.toInt()
-                    if (userInputAskInt >= INCREASE_THE_INDEX_IN_THE_LIST && userInputAskInt <= question.askAnswer.size) {
-                        if (trainer.checkAnswer(userInputAsk.toInt())) {
-                            println("Правильно")
-                        } else {
-                            println("Неправильно! ${question.correctAnswer.original} - это ${question.correctAnswer.translation}")
-                        }
+                    println(question.asConsoleString())
+                    val userInputAsk = readln().trim()
+                    val userInputAskInt = userInputAsk.toIntOrNull()
+                    if (userInputAskInt == null || userInputAskInt !in ZERO_TO_EXIT..question.askAnswer.size) {
+                        println("Введите число от $INCREASE_THE_INDEX_IN_THE_LIST до ${question.askAnswer.size} или $ZERO_TO_EXIT!")
                     }
-                    if (userInputAskInt == ZERO_TO_EXIT) {
-                        break
+                    when (userInputAskInt) {
+                        ZERO_TO_EXIT -> break
+                        in INCREASE_THE_INDEX_IN_THE_LIST..question.askAnswer.size -> {
+                            if (trainer.checkAnswer(userInputAsk.toInt())) {
+                                println("Правильно")
+                            } else {
+                                println("Неправильно! ${question.correctAnswer.original} - это ${question.correctAnswer.translation}")
+                            }
+                        }
                     }
                 }
             }
@@ -50,13 +50,18 @@ fun main() {
                 println()
             }
 
+            "3" -> {
+                trainer.resetProgress()
+                println("Прогресс сброшен")
+            }
+
             "0" -> {
                 println("Выход из программы")
                 return
             }
 
             else -> {
-                println("Введите '1','2' или '0'")
+                println("Введите '1','2','3' или '0'")
                 continue
             }
         }
